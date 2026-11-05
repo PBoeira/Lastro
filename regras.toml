@@ -1,0 +1,460 @@
+# Regras GENÉRICAS do categorizador (vão para o repositório). Não coloque aqui nada pessoal:
+# estabelecimentos que você frequenta, empregador, nomes de pessoas. Isso vai no
+# regras.local.toml (mesmo formato, fica fora do repositório e vem antes destas regras, menos
+# das estruturais: pares entre contas, Pix no crédito, pagamento repetido e compra estornada).
+# Depois de editar, rode:
+#     .\financas.cmd categorizar --perfil real
+#
+# Ordem de decisão (a primeira que resolver vence):
+#   1. ajustes.local.toml: decisão manual por lançamento (a página de revisão sugere a linha)
+#   2. [[regra]], de cima para baixo
+#   3. [categoria_api]: categoria da Pluggy, quando vier (só no período de teste)
+#   4. [[regra_final]], de cima para baixo (Pix, TED e boletos genéricos)
+#   5. "Sem categoria", marcado como duvidoso
+#
+# Condições de uma regra (todas as informadas precisam casar):
+#   descricao      expressão regular sobre descrição, estabelecimento e contraparte,
+#                  sem diferenciar maiúsculas nem acentos. Use aspas simples.
+#   conta          "BANK" (conta) ou "CREDIT" (cartão)
+#   sentido        "entrada" ou "saida"
+#   operacao       lista de tipos da API, ex.: ["PIX", "TED", "BOLETO", "PAGAMENTO_FATURA", "ESTORNO"]
+#   mesmo_titular  true se a outra ponta tem o seu CPF ou é uma conta sua
+#   par_proprio    true se há um lançamento de mesmo valor, em até 2 dias, em outra conta sua
+#   contraparte    "CPF" (pessoa) ou "CNPJ" (empresa)
+#   pessoa         false para não valer em Pix/TED para pessoas (CPF); use nas regras
+#                  de estabelecimento, porque nome de loja pode ser sobrenome
+#   instituicao    expressão regular sobre a instituição ('nubank', 'banco do brasil')
+#   categoria_api  expressão regular sobre a categoria da Pluggy
+#   documento      expressão regular sobre o documento da outra ponta ('CNPJ 00000000000191')
+#   parcelado      true para compras parceladas
+#   pix_credito_conta   true na saída da conta que acompanha um Pix no crédito
+#   pix_credito_cartao  true na cobrança do Pix no crédito no cartão (inclui as parcelas)
+#   pagamento_duplicado true no pagamento de fatura que aparece repetido no cartão
+#   compra_estornada    true na compra e no estorno do mesmo valor e da mesma loja
+#   serie_cancelada     true nas parcelas e nos créditos de um parcelamento cancelado
+# Resultado: categoria (precisa existir em [categorias]) e, opcional, duvidoso = true.
+
+[categorias]
+# nome = "despesa", "receita" ou "neutro". Neutro não entra em receitas nem despesas.
+"Mercado" = "despesa"
+"Restaurantes e delivery" = "despesa"
+"Transporte" = "despesa"
+"Moradia e contas" = "despesa"
+"Assinaturas e serviços digitais" = "despesa"
+"Saúde" = "despesa"
+"Academia e bem-estar" = "despesa"
+"Cuidados pessoais" = "despesa"
+"Pix no crédito" = "despesa"               # a cobrança no cartão (com a taxa) é o gasto
+"Educação" = "despesa"
+"Compras" = "despesa"
+"Lazer" = "despesa"
+"Viagem" = "despesa"
+"Tarifas, juros e IOF" = "despesa"
+"Impostos" = "despesa"
+"Seguros" = "despesa"
+"Empréstimos e financiamentos" = "despesa"
+"Apostas e loterias" = "despesa"
+"Doações e presentes" = "despesa"
+"Saque em dinheiro" = "despesa"
+"Pix e transferências enviadas" = "despesa"
+"Boletos e pagamentos diversos" = "despesa"
+"Estornos e cashback" = "despesa"          # valores positivos: reduzem os gastos
+"Sem categoria (saída)" = "despesa"
+"Salário, bolsa e renda" = "receita"
+"Rendimentos" = "receita"
+"Pix e transferências recebidas" = "receita"
+"Reembolsos" = "receita"
+"Sem categoria (entrada)" = "receita"
+"Transferência entre contas próprias" = "neutro"     # com par: saiu de uma conta conectada e entrou em outra
+"Entrada de conta própria não monitorada" = "neutro" # do seu CPF, vinda de conta que não está conectada
+"Saída para conta própria não monitorada" = "neutro" # para o seu CPF, em conta que não está conectada
+"Pagamento de fatura" = "neutro"                     # inclui fatura paga em espécie (só aparece no cartão)
+"Pix no crédito (repasse pela conta)" = "neutro"     # a saída na conta que acompanha o Pix no crédito
+"Pagamento de fatura (duplicado pela API)" = "neutro" # o mesmo pagamento aparece duas vezes no cartão
+"Compra estornada" = "neutro"                        # compra e estorno do mesmo valor e da mesma loja
+"Poupança (Caixinha e aplicações)" = "neutro"
+"Resgate de poupança" = "neutro"
+
+# ---------------------------------------------------------------- neutros
+# Caixinhas e aplicações vêm primeiro: são poupança ou resgate, nunca gasto nem receita.
+
+[[regra]]
+nome = "Caixinha ou aplicação (saída)"
+conta = "BANK"
+sentido = "saida"
+descricao = 'caixinha|limite garantido|dinheiro guardado|aplicacao|\baplic\b|\brdb\b|\bcdb\b|\blci\b|\blca\b|tesouro|rende facil|poupanca|investimento'
+categoria = "Poupança (Caixinha e aplicações)"
+
+[[regra]]
+nome = "Resgate de Caixinha ou aplicação"
+conta = "BANK"
+sentido = "entrada"
+descricao = 'caixinha|limite garantido|dinheiro resgatado|resgate|\brdb\b|\bcdb\b|\blci\b|\blca\b|tesouro|rende facil|poupanca'
+categoria = "Resgate de poupança"
+
+[[regra]]
+nome = "Resgate informado pelo banco"
+operacao = ["RESGATE_APLIC_FINANCEIRA"]
+categoria = "Resgate de poupança"
+
+[[regra]]
+nome = "Transferência entre contas conectadas (par)"
+par_proprio = true
+categoria = "Transferência entre contas próprias"
+
+[[regra]]
+nome = "Entrada do seu CPF sem par (conta não monitorada)"
+mesmo_titular = true
+sentido = "entrada"
+categoria = "Entrada de conta própria não monitorada"
+
+[[regra]]
+nome = "Saída para o seu CPF sem par (conta não monitorada)"
+mesmo_titular = true
+sentido = "saida"
+categoria = "Saída para conta própria não monitorada"
+
+# Pagamento repetido: o banco informa o pagamento e a Pluggy monta outro igual a partir da fatura.
+[[regra]]
+nome = "Pagamento de fatura repetido pela API"
+pagamento_duplicado = true
+categoria = "Pagamento de fatura (duplicado pela API)"
+
+# Compra anulada: crédito do mesmo valor e da mesma loja depois da compra (devolução, ou compra
+# parcelada depois pelo próprio banco). As duas ficam neutras; as parcelas, se houver, contam.
+[[regra]]
+nome = "Compra anulada por estorno do mesmo valor"
+compra_estornada = true
+categoria = "Compra estornada"
+
+# Parcelamento cancelado: crédito no mesmo cartão com o valor de uma parcela (ou da compra inteira)
+# e o nome da loja ou um texto de estorno. Fica duvidoso: confira na página de revisão.
+[[regra]]
+nome = "Parcelamento cancelado (detectado automaticamente)"
+serie_cancelada = true
+categoria = "Compra estornada"
+duvidoso = true
+
+# Pix no crédito (Nubank): o gasto é só a cobrança no cartão; a saída na conta é repasse.
+[[regra]]
+nome = "Pix no crédito: saída na conta"
+pix_credito_conta = true
+categoria = "Pix no crédito (repasse pela conta)"
+
+[[regra]]
+nome = "Pix no crédito: cobrança no cartão"
+pix_credito_cartao = true
+categoria = "Pix no crédito"
+
+[[regra]]
+nome = "Pagamento de fatura (lado do cartão)"
+conta = "CREDIT"
+operacao = ["PAGAMENTO_FATURA"]
+categoria = "Pagamento de fatura"
+
+[[regra]]
+nome = "Pagamento recebido no cartão"
+conta = "CREDIT"
+sentido = "entrada"
+descricao = 'pagamento|pagto|pgto'
+categoria = "Pagamento de fatura"
+
+[[regra]]
+nome = "Fatura do Ourocard paga por Pix ao Banco do Brasil (CNPJ)"
+conta = "BANK"
+sentido = "saida"
+documento = '00000000000191'
+categoria = "Pagamento de fatura"
+
+[[regra]]
+nome = "Pagamento de fatura do Nubank pela conta Nubank"
+instituicao = 'nubank'
+conta = "BANK"
+sentido = "saida"
+descricao = 'pagamento de fatura|pagamento da fatura'
+categoria = "Pagamento de fatura"
+
+[[regra]]
+nome = "Pagamento de fatura (lado da conta)"
+conta = "BANK"
+sentido = "saida"
+pessoa = false
+descricao = 'ourocard|cartao de credito|cartao cred|pagto cartao|pgto cartao|pag cartao|fatura (do |de )?cart'
+categoria = "Pagamento de fatura"
+
+[[regra]]
+nome = "Fatura do Nubank paga pelo BB (empresa)"
+instituicao = 'banco do brasil'
+conta = "BANK"
+sentido = "saida"
+contraparte = "CNPJ"
+descricao = 'nu pagamentos|nubank'
+categoria = "Pagamento de fatura"
+
+[[regra]]
+nome = "Fatura do Nubank paga pelo BB (boleto)"
+instituicao = 'banco do brasil'
+conta = "BANK"
+sentido = "saida"
+operacao = ["BOLETO"]
+descricao = 'nu pagamentos|nubank'
+categoria = "Pagamento de fatura"
+
+[[regra]]
+nome = "Fatura do Ourocard paga pelo Nubank"
+instituicao = 'nubank'
+conta = "BANK"
+sentido = "saida"
+pessoa = false
+descricao = 'ourocard|banco do brasil'
+categoria = "Pagamento de fatura"
+
+# ---------------------------------------------------------------- estornos, tarifas, renda
+
+[[regra]]
+nome = "IOF, tarifas, juros e encargos"
+sentido = "saida"
+descricao = '\biof\b|tarifa|anuidade|juros|multa|encargo|\bmora\b|rotativo|cesta de servicos|pacote de servicos'
+categoria = "Tarifas, juros e IOF"
+
+[[regra]]
+nome = "Tarifas informadas pelo banco"
+sentido = "saida"
+operacao = ["TARIFA", "PACOTE_TARIFA_SERVICOS", "TARIFA_SERVICOS_AVULSOS", "ENCARGOS_JUROS_CHEQUE_ESPECIAL"]
+categoria = "Tarifas, juros e IOF"
+
+[[regra]]
+nome = "Rendimento informado pelo banco"
+sentido = "entrada"
+operacao = ["RENDIMENTO_APLIC_FINANCEIRA"]
+categoria = "Rendimentos"
+
+[[regra]]
+nome = "Rendimento pela descrição"
+sentido = "entrada"
+descricao = 'rendimento|dividendo|juros sobre capital'
+categoria = "Rendimentos"
+
+[[regra]]
+nome = "Salário, bolsa ou estágio"
+sentido = "entrada"
+descricao = 'salario|folha de pag|remuneracao|proventos|vencimentos|\bbolsa\b|estagio|\bcnpq\b|\bcapes\b|\bciee\b|\bnube\b'
+categoria = "Salário, bolsa e renda"
+
+[[regra]]
+nome = "Folha de pagamento informada pelo banco"
+sentido = "entrada"
+operacao = ["FOLHA_PAGAMENTO", "PORTABILIDADE_SALARIO"]
+categoria = "Salário, bolsa e renda"
+
+[[regra]]
+nome = "Reembolso recebido"
+sentido = "entrada"
+descricao = 'reembolso'
+categoria = "Reembolsos"
+
+[[regra]]
+nome = "Saque"
+sentido = "saida"
+descricao = '\bsaque\b'
+categoria = "Saque em dinheiro"
+
+[[regra]]
+nome = "Saque informado pelo banco"
+sentido = "saida"
+operacao = ["SAQUE"]
+categoria = "Saque em dinheiro"
+
+# ---------------------------------------------------------------- estabelecimentos
+# Sem 'sentido': um crédito do mesmo estabelecimento (estorno sem a palavra) reduz a categoria.
+
+[[regra]]
+nome = "Impostos"
+pessoa = false
+descricao = '\bdarf\b|receita federal|\bipva\b|\biptu\b|detran|licenciamento|\bgru\b|simples nacional'
+categoria = "Impostos"
+
+[[regra]]
+nome = "Apostas e loterias"
+pessoa = false
+descricao = 'bet365|betano|pixbet|sportingbet|superbet|estrelabet|esportes da sorte|\bblaze\b|\bbet\b|loteria|loterica|mega ?sena|lotofacil'
+categoria = "Apostas e loterias"
+
+[[regra]]
+nome = "Restaurantes e delivery"
+pessoa = false
+descricao = 'ifood|\bifd\b|rappi|uber ?eats|99 ?food|ze delivery|aiqfome|restaurante|lanchonete|pizzaria|padaria|burger|mcdonald|\bmc donalds\b|subway|habib|outback|spoleto|giraffas|starbucks|cafeteria|\bacai\b|sorveteria|churrascaria|\bbobs\b|bob s'
+categoria = "Restaurantes e delivery"
+
+[[regra]]
+nome = "Compras online e lojas"
+pessoa = false
+descricao = 'mercado ?livre|mercadolivre|amazon(?! ?prime)|\bamzn\b|shopee|shein|aliexpress|magalu|magazine luiza|americanas|casas bahia|kabum|renner|riachuelo|\bc ?& ?a\b|\bzara\b|centauro|decathlon|netshoes|leroy merlin|tok ?stok|\bikea\b|boticario|sephora|natura cosmeticos'
+categoria = "Compras"
+
+[[regra]]
+nome = "Mercado"
+pessoa = false
+descricao = 'supermercado|hipermercado|\bmercado\b(?! ?(livre|pago))|mercadinho|hortifruti|sacolao|assai|atacadao|carrefour|pao de acucar|extra (hiper|super|mercado)'
+categoria = "Mercado"
+
+[[regra]]
+nome = "Transporte"
+pessoa = false
+descricao = 'uber(?! ?eats)|\b99 ?(app|pop|tecnologia|taxi)\b|\b99app\b|cabify|\btaxi\b|onibus|\bmetro\b|posto|combustivel|shell|ipiranga|petrobras|br mania|estacionamento|estapar|sem parar|conectcar|\bveloe\b|pedagio'
+categoria = "Transporte"
+
+[[regra]]
+nome = "Moradia e contas"
+pessoa = false
+descricao = 'aluguel|condominio|eletrobras|\benel\b|energia eletrica|saneamento|\bclaro\b|\bvivo\b|\btim\b|\boi (s ?a|fibra|movel)|net servicos|\bsky\b|telefonica|provedor|fibra'
+categoria = "Moradia e contas"
+
+[[regra]]
+nome = "Assinaturas e serviços digitais"
+pessoa = false
+descricao = 'netflix|spotify|disney|\bhbo\b|max\.com|prime ?video|amazon ?prime|globoplay|youtube|google ?(one|storage|play)|apple\.com|icloud|deezer|paramount|crunchyroll|chatgpt|openai|anthropic|claude\.ai|microsoft|xbox|playstation|steam|nintendo|adobe|canva|notion|duolingo|dropbox'
+categoria = "Assinaturas e serviços digitais"
+
+[[regra]]
+nome = "Saúde"
+pessoa = false
+descricao = 'farmacia|drogaria|droga ?raia|drogasil|pague menos|panvel|hospital|clinica|laboratorio|odonto|dentista|unimed|\bamil\b|sulamerica|bradesco saude|hapvida|psicolog|medic'
+categoria = "Saúde"
+
+[[regra]]
+nome = "Academia e bem-estar"
+pessoa = false
+descricao = 'smart ?fit|bluefit|bodytech|selfit|academia|gympass|wellhub|totalpass|crossfit|pilates|\byoga\b'
+categoria = "Academia e bem-estar"
+
+[[regra]]
+nome = "Cuidados pessoais"
+pessoa = false
+descricao = 'barbearia|barber|barbeiro|cabeleireir|salao de beleza'
+categoria = "Cuidados pessoais"
+
+[[regra]]
+nome = "Educação"
+pessoa = false
+descricao = 'faculdade|universidade|\bcurso\b|udemy|coursera|alura|livraria|saraiva|kindle|apostila|\bescola\b|mensalidade'
+categoria = "Educação"
+
+[[regra]]
+nome = "Viagem"
+pessoa = false
+descricao = '\blatam\b|gol linhas|voegol|azul linhas|voeazul|booking|airbnb|\bhotel\b|pousada|hostel|decolar|123 ?milhas|maxmilhas|rodoviaria|clickbus|\bbuser\b'
+categoria = "Viagem"
+
+[[regra]]
+nome = "Lazer"
+pessoa = false
+descricao = 'ingresso|sympla|eventim|ticketmaster|cinema|cinemark|kinoplex|\buci\b|teatro|museu|bilheteria'
+categoria = "Lazer"
+
+[[regra]]
+nome = "Seguros"
+pessoa = false
+descricao = '\bseguro\b|porto seguro|mapfre|tokio marine|allianz'
+categoria = "Seguros"
+
+[[regra]]
+nome = "Doações"
+pessoa = false
+descricao = 'doacao|vakinha|unicef|medicos sem fronteiras'
+categoria = "Doações e presentes"
+
+# Estornos depois dos estabelecimentos: o estorno de uma compra conhecida (inclusive o de um
+# "Parcelamento de compra" do Nubank) cai na categoria da compra e a anula ali.
+[[regra]]
+nome = "Estorno ou cashback informado pelo banco"
+sentido = "entrada"
+operacao = ["ESTORNO", "CASHBACK"]
+categoria = "Estornos e cashback"
+
+[[regra]]
+nome = "Estorno pela descrição"
+sentido = "entrada"
+descricao = 'estorno|cashback|devolucao|cancelamento|chargeback|credito de compra'
+categoria = "Estornos e cashback"
+
+# ---------------------------------------------------------------- categoria da Pluggy
+# expressão sobre a categoria da Pluggy (em inglês) = categoria nossa.
+# Pode ser um texto ou { saida = "...", entrada = "..." }. A ordem importa.
+
+[categoria_api]
+'same person' = { entrada = "Entrada de conta própria não monitorada", saida = "Saída para conta própria não monitorada" }
+'credit card payment' = "Pagamento de fatura"
+'proceeds|dividends' = "Rendimentos"
+'automatic investment|fixed income|mutual funds|variable income|pension|investment' = { saida = "Poupança (Caixinha e aplicações)", entrada = "Resgate de poupança" }
+'salary|retirement|government aid|entrepreneurial|non-recurring income|^income' = "Salário, bolsa e renda"
+'student loan|loans|financing' = "Empréstimos e financiamentos"
+'late payment|overdraft|interests charged|bank fees|account fees|wire transfer fees|\batm\b|credit card fees|tax on financial operations' = "Tarifas, juros e IOF"
+'income taxes|taxes on investments|urban land|vehicle ownership|traffic tickets|^taxes' = "Impostos"
+'groceries' = "Mercado"
+'eating out|food delivery|food and drinks' = "Restaurantes e delivery"
+'taxi|ride-hailing|public transportation|car rental|bicycle|gas station|parking|tolls|vehicle maintenance|automotive|transportation' = "Transporte"
+'gyms|fitness|sports practice|wellness' = "Academia e bem-estar"
+'video streaming|music streaming|gaming|digital services' = "Assinaturas e serviços digitais"
+'dentist|pharmacy|optometry|hospital|healthcare|health insurance' = "Saúde"
+'telecommunications|internet|mobile|\btv\b|rent|houseware|utilities|water|electricity|\bgas\b|housing' = "Moradia e contas"
+'online courses|university|school|kindergarten|education|bookstore' = "Educação"
+'insurance' = "Seguros"
+'lottery|online bet|gambling' = "Apostas e loterias"
+'airport|airlines|accommodation|mileage|bus tickets|travel' = "Viagem"
+'stadiums|landmarks|cinema|tickets|leisure' = "Lazer"
+# 'donations' fica de fora de propósito: a categoria da Pluggy pode marcar como "Donations"
+# compras comuns no cartão. Sem esse mapeamento elas aparecem na página de revisão.
+'cashback' = "Estornos e cashback"
+'online shopping|electronics|pet supplies|clothing|kids|sports goods|office supplies|shopping' = "Compras"
+
+# ---------------------------------------------------------------- regras finais (genéricas)
+
+[[regra_final]]
+nome = "Pix ou transferência enviada"
+sentido = "saida"
+operacao = ["PIX", "TED", "DOC", "TRANSFERENCIA_MESMA_INSTITUICAO"]
+categoria = "Pix e transferências enviadas"
+duvidoso = true
+
+[[regra_final]]
+nome = "Pix ou transferência enviada (descrição)"
+sentido = "saida"
+descricao = '\bpix\b|\bted\b|\bdoc\b|transf'
+categoria = "Pix e transferências enviadas"
+duvidoso = true
+
+# Pix recebidos de outras pessoas são receita normal. Se quiser revisá-los, acrescente
+# duvidoso = true numa cópia destas regras no regras.local.toml.
+[[regra_final]]
+nome = "Pix ou transferência recebida"
+sentido = "entrada"
+operacao = ["PIX", "TED", "DOC", "TRANSFERENCIA_MESMA_INSTITUICAO", "DEPOSITO"]
+categoria = "Pix e transferências recebidas"
+
+[[regra_final]]
+nome = "Pix ou transferência recebida (descrição)"
+sentido = "entrada"
+descricao = '\bpix\b|\bted\b|\bdoc\b|transf|deposito'
+categoria = "Pix e transferências recebidas"
+
+[[regra_final]]
+nome = "Boleto ou convênio"
+sentido = "saida"
+operacao = ["BOLETO", "CONVENIO_ARRECADACAO"]
+categoria = "Boletos e pagamentos diversos"
+duvidoso = true
+
+[[regra_final]]
+nome = "Boleto ou convênio (descrição)"
+sentido = "saida"
+descricao = 'boleto|titulo|cobranca|convenio'
+categoria = "Boletos e pagamentos diversos"
+duvidoso = true
+
+[[regra_final]]
+nome = "Outro crédito no cartão"
+conta = "CREDIT"
+sentido = "entrada"
+categoria = "Estornos e cashback"
+duvidoso = true
