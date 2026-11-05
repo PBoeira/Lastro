@@ -1,0 +1,36 @@
+# Tudo que é pessoal termina em .local.* e nunca vai para o repositório:
+# config.local.json (itemIds), regras.local.toml (regras pessoais), ajustes.local.toml
+# (decisões por lançamento), CLAUDE.local.md e PROGRESSO.local.md (contexto e andamento),
+# .claude/settings.local.json (permissões ligadas à sua conta e ao seu computador).
+*.local.*
+*.local
+
+# Dados pessoais: banco, relatórios e logs nunca vão para o repositório
+dados/
+relatorios/
+logs/
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.tmp
+
+# Segredos (não devem existir aqui, mas por garantia)
+.env
+*.secret
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Cópias de envio e arquivos do Windows e de editores
+Lastro-GitHub/
+*.zip
+*.log
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
